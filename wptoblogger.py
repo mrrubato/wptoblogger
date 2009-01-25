@@ -19,6 +19,8 @@
 #    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 #    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #    THE SOFTWARE.
+import gdata
+import time
 
 """
     Utility to copy blog posts from Wordpress to Blogger.
@@ -117,8 +119,6 @@ def to_blog_time(time_tuple):
     return time.strftime('%Y-%m-%dT%H:%M:%SZ', time_tuple)
 
 def call_post(svc, entry, url):
-    import gdata
-    import time
     tries = 5
     while True:
         try:
@@ -138,7 +138,7 @@ def blogger_post(svc, blog_id, author, title, content, published_date, categorie
     entry = gdata.GDataEntry()
     entry.author.append(atom.Author(atom.Name(text=author)))
     entry.title = atom.Title('xhtml', title)
-    entry.content = atom.Content('html', '', content)
+    entry.content = atom.Content(content_type='html', text=content)
     entry.published = atom.Published(to_blog_time(published_date))
     entry.category.extend([atom.Category(c, 'http://www.blogger.com/atom/ns#') for c in categories])
     # Note that this appears to return a valid response even if your post has not been 
@@ -146,7 +146,8 @@ def blogger_post(svc, blog_id, author, title, content, published_date, categorie
     post = call_post(svc, entry, '/feeds/%s/posts/default' % blog_id)
     return dict(
         post = post,
-        comment_func = functools.partial(comment, svc, comment_post_url_from_post(post))
+        svc=svc,
+        url=comment_post_url_from_post(post)
     )
 
 def comment(svc, url, author, author_url, content, published_date, add_author = False):
@@ -159,7 +160,7 @@ def comment(svc, url, author, author_url, content, published_date, add_author = 
         if author_url:
             author_html = '<a href="%s">' % author_url + author_html + '</a>'
         content = '<em>Comment from %s:</em>\r\n\r\n' % author_html + content
-    entry.content = atom.Content('html', '', content)
+    entry.content = atom.Content(content_type='xhtml', text=content)
     entry.published = atom.Published(to_blog_time(published_date))
     return call_post(svc, entry, url)
         
@@ -183,10 +184,12 @@ def convert(wp_xml_file, blogger_service, blog_id, post_author):
     for post in posts:
         logger.info("Processing post %s" % post['title'])
         posted = blogger_post(blogger_service, blog_id, post_author, post['title'], post['content'], post['published'], post['categories'])
-        add_comment = posted['comment_func']
-        for comment in post['comments']:
-            author = comment['author']
-            add_comment(author, comment['author_url'], comment['content'], comment['published'], add_author = (author != post_author)) 
+        for com in post['comments']:
+            author = com['author']
+            comment(posted['svc'], posted['url'], author, com['author_url'], 
+                        com['content'], com['published'], 
+                        add_author = (author != post_author),
+                        ) 
 
 def run(wp_xml_file, blogger_user, blogger_password, authsub_token, blog_id, post_author, delete):
     if authsub_token:
