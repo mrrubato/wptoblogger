@@ -153,6 +153,7 @@ def blogger_post(svc, blog_id, author, title, content, published_date, categorie
 def comment(svc, url, author, author_url, content, published_date, add_author = False):
     import gdata
     from gdata import atom
+    add_author = True
     entry = gdata.GDataEntry()
     entry.author.append(atom.Author(atom.Name(text=author))) # according to forum and practice this is ignored :(
     if add_author:
